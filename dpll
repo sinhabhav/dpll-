@@ -1,0 +1,263 @@
+import copy
+import sys
+inputFile = open(sys.argv[2])
+
+symmbols = set()
+model = {}
+
+'''This function finds the pure symbol'''
+def pureSymbol(clauseSet, symbols,model):
+    for sym in symbols:
+        a= findPureSymbol(clauseSet, sym)
+        b= findPureSymbol(clauseSet, ["not",sym])
+        if not(a and b):
+            if a:
+                removeDisjunct(clauseSet, sym)
+                model.update({sym:"true"})
+            if b:
+                removeDisjunct(clauseSet, ["not", sym])
+                model.update({sym:"false"})
+    return clauseSet, model
+
+'''This function finds if the Symbol exists'''	
+def findPureSymbol(clauseSet, sym):
+    for clause in clauseSet:
+        if (isinstance(sym , str)):
+            if(sym in clause):
+                return True
+        if(isinstance(sym, list)) and (isinstance(clause, list)):
+            if(sym in clause) or sym == clause:
+                return True
+            
+    return False
+          
+'''This function finds the unit clauses'''
+def unitClause(clauseSet, model):
+    setLen = len(clauseSet)
+    i=-1	
+    while(i<setLen-1):
+        i=i+1
+        if(setLen==1 and clauseSet[0]=="and"):
+            model.update({"result":"false"})
+            return clauseSet,model
+        if (clauseSet[i] == "and"):
+            continue
+        if (isinstance(clauseSet[i], str)):
+            if (["not",clauseSet[i]] in clauseSet):
+                model.update({"result":"false"})
+                return clauseSet,model
+            key = clauseSet[i]	
+            model.update({key : "True"})
+            clauseSet = removeLiteral(clauseSet,clauseSet[i])
+            if(len(clauseSet)>0):			
+                clauseSet = removeDisjunct(clauseSet, key)
+            if(len(clauseSet)>0):
+                clauseSet = removePropagate(clauseSet,["not",key])
+            i=-1
+            setLen = len(clauseSet)
+            continue
+        if((isinstance(clauseSet[i], list)) and (len(clauseSet[i])==2) and (clauseSet[i][0]=="not")):
+            if (clauseSet[i][1] in clauseSet):
+                model.update({"result":"false"})
+                return clauseSet,model
+            key = clauseSet[i][1]
+            model.update({key : "False"})			
+            clauseSet = removeLiteral(clauseSet,["not",key])	
+            if(len(clauseSet)>0):			
+                clauseSet = removeDisjunct(clauseSet,["not",key])
+            if(len(clauseSet)>0):
+                clauseSet = removePropagate(clauseSet,key)				
+            i=-1
+            setLen = len(clauseSet)			
+    return clauseSet, model
+
+'''This function removes the unwanted clauses'''	
+def removePropagate(clauseSet,removeClause):
+    i=-1
+    setLen = (len(clauseSet))
+    while i < setLen-1:
+        i = i+1    
+        if(isinstance(clauseSet[i],list)):
+            for cs in clauseSet[i]:
+                if removeClause == cs:		
+                    clauseSet[i].remove(removeClause)
+                    break
+        if(isinstance(clauseSet[i],str) and isinstance(removeClause,str)):
+                if removeClause == clauseSet[i]:		
+                    clauseSet[i].remove(removeClause)
+    return clauseSet
+
+'''This function removes the disjuncts'''
+def removeDisjunct(clauseSet, removeClause):
+    i=-1
+    while i < (len(clauseSet)-1):
+        i = i+1
+        if(isinstance(clauseSet[i],list)):
+            for cs in clauseSet[i]:
+                if removeClause == cs:		
+                    clauseSet.remove(clauseSet[i])
+                    i =-1
+                    break
+        if(isinstance(clauseSet[i],str) and isinstance(removeClause,str)):
+            if removeClause == clauseSet[i]:
+                clauseSet.remove(clauseSet[i])
+                i=-1
+    return clauseSet    			
+
+'''This function removes the literals'''
+def removeLiteral(clauseSet,removeClause):
+    i=-1
+    setLen = (len(clauseSet))
+    while i < setLen-1:
+        i = i+1
+        if removeClause == clauseSet[i]:
+            clauseSet.remove(clauseSet[i])
+            i=-1
+            setLen = (len(clauseSet))
+    return clauseSet
+
+'''This function checks the base conditions like empty, invalid etc'''	
+def checkBaseCase(clauseSet, model, rest):
+
+    if(clauseSet==[]):
+        model.update({"result":"true"})
+        return model
+    if isinstance(clauseSet[0], str) and len(clauseSet)==1:
+        model.update({"result":"true"})
+        return model
+    if not(clauseSet[0] == "and"):
+        model.update({"result":"true"})
+        if(len(rest) == 0):
+            return model
+        sym = rest.pop()
+        if (["not",sym] in clauseSet ) or ["not",sym] == clauseSet:
+            model.update({sym:"false"})
+        else:
+            model.update({sym:"true"})
+        return model       	
+    for clause in clauseSet:
+        if(isinstance(clause, list)) and len(clause) == 1 and "or" in clause:
+            model.update({"result":"false"})
+            return model
+    if len(clauseSet) == 1 and "and" in clauseSet:
+            model.update({"result":"true"})
+            return model
+    return model
+
+'''This is the driver for dpll'''	
+def dpll(clauseSet):
+    answer = ""
+    try:
+        traverse(clauseSet)
+        rest = copy.deepcopy(symbols)
+        clauseSet1, model1 = dpll_sat(clauseSet, model, rest)
+        output = computeModel(model1, symbols)
+    except Exception:
+        answer = ""
+    else:
+        answer  = output	
+    return answer
+
+'''DPLL implementation'''	
+def dpll_sat(clauseSet, model, rest):
+
+    model = checkBaseCase(clauseSet, model, rest)
+    if model.get("result") != "":
+        return clauseSet, model	
+    if clauseSet == ["and"]:
+        model.update({"result":"true"})
+        return clauseSet, model
+    model0 = copy.deepcopy(model) 
+    clauseSet0 = copy.deepcopy(clauseSet)
+    clauseSet0, model0 = pureSymbol(clauseSet0, rest, model0)
+    if(model0!=model):
+        for key in model0:
+            if key in rest:
+                rest.remove(key)
+        clauseSet0,model0= dpll_sat(clauseSet0, model0, rest)
+        if model0.get("result") != "":
+            return clauseSet0, model0
+    model1 = copy.deepcopy(model0)
+    clauseSet1 = copy.deepcopy(clauseSet0)
+    clauseSet1, model1 = unitClause(clauseSet1,model1)
+  
+    if(model1!=model0):
+        for key in model1:
+            if key in rest:
+                rest.remove(key)
+        clauseSet1, model1 = dpll_sat(clauseSet1, model1, rest)
+        if model1.get("result") != "":
+            return clauseSet1, model1
+
+    key = rest.pop()
+    if (["not",key] in clauseSet1) and (key in clauseSet1):
+        model1.update({"result":"false"})
+        return clauseSet1, model1
+    clauseSet2 = copy.deepcopy(clauseSet1)
+    clauseSet2 = removeDisjunct(clauseSet2, key)
+    model2 = copy.deepcopy(model1)
+    model2.update({key:"true"})
+    clauseSet2 = removePropagate(clauseSet2,["not",key])
+    clauseSet3 = copy.deepcopy(clauseSet2)
+    rest1 = copy.deepcopy(rest)
+    clauseSet4, model4 = dpll_sat(clauseSet3, model2, rest1)
+    if model4.get("result") == "true":
+        return clauseSet4, model4
+    clauseSet5 = copy.deepcopy(clauseSet1)
+    model5 = copy.deepcopy(model1)
+    clauseSet5 = removeDisjunct(clauseSet5, ["not",key])
+    model5.update({key:"false"})
+    clauseSet5 = removePropagate(clauseSet5,key)
+    clauseSet6 = copy.deepcopy(clauseSet5)
+    model6 = copy.deepcopy(model5)
+    rest2 = copy.deepcopy(rest)
+    clauseSet6, model6 = dpll_sat(clauseSet6, model6, rest2)
+    if model6.get("result") == "true":
+        return clauseSet6, model6
+    else:
+        return None, {"result":""}	
+ 
+'''Finds the symbols''' 
+def traverse(clauseSet):
+    for clause in clauseSet:
+        if(isinstance(clause, str)) and len(clause) == 1 :
+            symbols.add(clause)
+        if (isinstance(clause, list)):
+            traverse(clause)
+
+'''Creates the model'''
+def computeModel(oldModel, symbols):
+    newModel = "["
+    newModel = newModel+"'"+(oldModel.get("result"))+"'"
+    if oldModel.get("result") == "true":
+        for m in symbols:
+            if m not in oldModel:
+                newModel = newModel +(", '"+m+"="+"true'")
+            else:
+                newModel = newModel +(", '"+m+"="+oldModel.get(m)+"'")
+        newModel = newModel+"]"	
+    else:
+        if oldModel.get("result") == "":
+            newModel = "['false']"
+    
+    return newModel
+
+'''This acts as main. Takes input, calls dpll and produces output'''	
+noOfTestCases = int (inputFile.readline())
+if noOfTestCases =="" or noOfTestCases == 0:
+    print "null"
+    inputFile.close()
+    sys.exit()
+if noOfTestCases > 0:
+    outputFile = open('CNF_satisfiability.txt', 'w+')
+    for i in range(0,noOfTestCases):
+        model = {}
+        model.update({"result":""})
+        symbols = set()
+        clauseSet = eval(inputFile.readline())
+        output = dpll(clauseSet)
+        print output
+        outputFile.write(''.join(format(output))+"\n")
+inputFile.close()
+outputFile.close()
+sys.exit()
